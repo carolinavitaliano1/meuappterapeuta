@@ -17,7 +17,7 @@ st.set_page_config(
 # Configurando o modelo Gemini
 if GOOGLE_API_KEY != "SUA_API_KEY_AQUI":
     genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 else:
     model = None
 
@@ -132,4 +132,5 @@ elif pagina_selecionada == "Ver Roteiros Existentes":
     """)
     
     # Adicione mais roteiros aqui conforme necessário...
+
 
