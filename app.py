@@ -2,12 +2,11 @@ import streamlit as st
 import google.generativeai as genai
 
 # --- Configuração da Página e da API ---
-# NOTA: Substitua "SUA_API_KEY_AQUI" pela sua chave de API do Google AI Studio.
-# Você pode obter uma em: https://makersuite.google.com/app/apikey
+# Esta nova versão lê a chave diretamente do painel de "Secrets" do Streamlit
 try:
-    from api_key import GOOGLE_API_KEY
-except ImportError:
-    GOOGLE_API_KEY = "SUA_API_KEY_AQUI"
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+except (KeyError, FileNotFoundError):
+    GOOGLE_API_KEY = "SUA_API_KEY_AQUI" # Usado apenas para testes locais
 
 st.set_page_config(
     page_title="Gerador de Roteiros Pedagógicos",
@@ -133,3 +132,4 @@ elif pagina_selecionada == "Ver Roteiros Existentes":
     """)
     
     # Adicione mais roteiros aqui conforme necessário...
+
