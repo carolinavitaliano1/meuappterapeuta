@@ -14,7 +14,8 @@ st.set_page_config(
 # ===============================
 # CONFIGURAÇÃO OPENAI
 # ===============================
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 # ===============================
 # ESTADO GLOBAL (CADASTRO)
@@ -233,5 +234,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
