@@ -1,7 +1,8 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 import os
+import time
 
 # ===============================
 # CONFIGURAÇÃO DA PÁGINA
@@ -12,13 +13,12 @@ st.set_page_config(
 )
 
 # ===============================
-# CONFIGURAÇÃO OPENAI
+# CLIENTE OPENAI (API NOVA)
 # ===============================
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-
 # ===============================
-# ESTADO GLOBAL (CADASTRO)
+# ESTADO GLOBAL – PACIENTES
 # ===============================
 if "patients" not in st.session_state:
     st.session_state.patients = {}
@@ -42,25 +42,44 @@ def extract_text_from_txt(file):
 
 
 def call_openai(prompt):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "Você é um terapeuta clínico experiente, com atuação multidisciplinar."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.4
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Você é um terapeuta clínico experiente, com atuação multidisciplinar."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.4
+        )
+        return response.choices[0].message.content
+
+    except RateLimitError:
+        time.sleep(6)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Você é um terapeuta clínico experiente, com atuação multidisciplinar."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.4
+        )
+        return response.choices[0].message.content
 
 
 def generate_session_prompt(patient_info, goals, approach, knowledge_base, num_sessions):
-    prompt = f"""
+    return f"""
 Atue como uma EQUIPE TERAPÊUTICA MULTIDISCIPLINAR EXPERIENTE.
 
 ══════════════════════════════
@@ -84,20 +103,21 @@ Contexto clínico / queixa principal:
 ══════════════════════════════
 📅 PLANEJAMENTO TERAPÊUTICO
 ══════════════════════════════
-Crie {num_sessions} sessões terapêuticas numeradas (Sessão 1, Sessão 2, etc),
+Crie {num_sessions} sessões terapêuticas numeradas
+(Sessão 1, Sessão 2, Sessão 3…),
 com progressão clínica coerente entre elas.
 
 ══════════════════════════════
 📚 BASE DE CONHECIMENTO
 ══════════════════════════════
-Utilize prioritariamente os materiais abaixo como referência clínica e teórica:
+Utilize prioritariamente os materiais abaixo como base teórica e prática:
 
 {knowledge_base[:15000]}
 
 ══════════════════════════════
 🛠️ TAREFA
 ══════════════════════════════
-Para CADA sessão, apresente obrigatoriamente:
+Para CADA sessão, descreva obrigatoriamente:
 
 📍 Sessão X
 - Objetivo clínico da sessão
@@ -106,11 +126,10 @@ Para CADA sessão, apresente obrigatoriamente:
 - Fecho
 - Indicadores de evolução observáveis
 
-Use linguagem técnica, clara e profissional.
-O texto deve estar pronto para ser usado em relatório clínico ou PDF.
+Utilize linguagem técnica, clara e profissional.
+O texto deve estar pronto para uso em relatório clínico ou PDF.
 Evite respostas genéricas.
 """
-    return prompt
 
 # ===============================
 # INTERFACE PRINCIPAL
@@ -123,7 +142,7 @@ def main():
     col1, col2 = st.columns([1, 1])
 
     # ===============================
-    # COLUNA 1 – CADASTRO / SELEÇÃO
+    # COLUNA 1 – PACIENTE E SESSÕES
     # ===============================
     with col1:
         st.info("👤 Cadastro de Paciente")
@@ -156,11 +175,11 @@ def main():
 
         session_goals = st.text_area(
             "Objetivos terapêuticos",
-            placeholder="Ex: estimular comunicação funcional, ampliar autorregulação..."
+            placeholder="Ex: ampliar comunicação funcional, reduzir comportamentos disfuncionais..."
         )
 
         num_sessions = st.number_input(
-            "Quantidade de sessões / atividades",
+            "Quantidade de sessões",
             min_value=1,
             max_value=52,
             step=1,
@@ -185,10 +204,10 @@ def main():
     # COLUNA 2 – BASE DE CONHECIMENTO
     # ===============================
     with col2:
-        st.warning("📚 Base de Conhecimento")
+        st.warning("📚 Base de Conhecimento do Terapeuta")
 
         uploaded_files = st.file_uploader(
-            "Anexe materiais (PDF ou TXT)",
+            "Anexe livros, artigos ou materiais (PDF ou TXT)",
             type=["pdf", "txt"],
             accept_multiple_files=True
         )
@@ -206,35 +225,32 @@ def main():
             st.success(f"{len(uploaded_files)} arquivo(s) carregado(s).")
 
     # ===============================
-    # GERAR PLANO COM IA REAL
+    # GERAR PLANO COM IA
     # ===============================
     st.markdown("---")
 
     if st.button("✨ Gerar Plano Terapêutico"):
         if not patient_data or not session_goals:
-            st.error("Selecione um paciente e informe os objetivos.")
-        else:
-            final_prompt = generate_session_prompt(
-                patient_data,
-                session_goals,
-                ", ".join(approach),
-                knowledge_text,
-                num_sessions
-            )
+            st.error("Selecione um paciente e informe os objetivos terapêuticos.")
+            return
 
-            with st.spinner("Gerando plano terapêutico com IA..."):
-                resultado = call_openai(final_prompt)
+        final_prompt = generate_session_prompt(
+            patient_data,
+            session_goals,
+            ", ".join(approach),
+            knowledge_text,
+            num_sessions
+        )
 
-            st.markdown("### 📝 Plano Terapêutico Gerado")
-            st.markdown(resultado)
+        with st.spinner("Gerando plano terapêutico com IA..."):
+            resultado = call_openai(final_prompt)
 
-            with st.expander("🔍 Ver prompt enviado para a IA"):
-                st.code(final_prompt)
+        st.markdown("### 📝 Plano Terapêutico Gerado")
+        st.markdown(resultado)
+
+        with st.expander("🔍 Ver prompt enviado para a IA"):
+            st.code(final_prompt)
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
