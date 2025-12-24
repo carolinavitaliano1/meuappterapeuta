@@ -1,7 +1,8 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-import openai
+from openai import OpenAI
 import os
+
 
 # ===============================
 # CONFIGURAÇÃO DA PÁGINA
@@ -233,3 +234,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
