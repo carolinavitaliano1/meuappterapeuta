@@ -1,136 +1,149 @@
 import streamlit as st
-import google.generativeai as genai
+from PyPDF2 import PdfReader
+import io
 
-# --- Configuração da Página e da API ---
-# Esta nova versão lê a chave diretamente do painel de "Secrets" do Streamlit
-try:
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-except (KeyError, FileNotFoundError):
-    GOOGLE_API_KEY = "SUA_API_KEY_AQUI" # Usado apenas para testes locais
+# Configuração da Página
+st.set_page_config(page_title="NeuroTech Evoluir - Terapeuta AI", layout="wide")
 
-st.set_page_config(
-    page_title="Gerador de Roteiros Pedagógicos",
-    page_icon="✨",
-    layout="wide"
-)
+# --- FUNÇÕES AUXILIARES ---
 
-# Configurando o modelo Gemini
-if GOOGLE_API_KEY != "SUA_API_KEY_AQUI":
-    genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
-else:
-    model = None
+def extract_text_from_pdf(file):
+    """Extrai texto de um ficheiro PDF carregado."""
+    pdf = PdfReader(file)
+    text = ""
+    for page in pdf.pages:
+        text += page.extract_text()
+    return text
 
-# --- Cabeçalho e Título ---
-st.title("Painel de Roteiros de Atividades ✨")
-st.markdown("Use o menu à esquerda para navegar entre os roteiros existentes ou crie um novo com o poder da IA.")
+def extract_text_from_txt(file):
+    """Extrai texto de um ficheiro TXT carregado."""
+    return file.getvalue().decode("utf-8")
 
-# --- Barra Lateral (Sidebar) ---
-st.sidebar.header("Navegação")
-pagina_selecionada = st.sidebar.radio(
-    "Selecione uma opção:",
-    ["Criar Roteiro com IA", "Ver Roteiros Existentes"]
-)
+def generate_session_prompt(patient_info, goals, knowledge_base):
+    """Cria o prompt para a IA com base nos dados do paciente e no conhecimento adicionado."""
+    
+    prompt = f"""
+    Atua como um Terapeuta Especialista e cria um plano de sessão detalhado.
+    
+    --- DADOS DO PACIENTE ---
+    Nome: {patient_info.get('name', 'N/A')}
+    Idade: {patient_info.get('age', 'N/A')}
+    Diagnóstico/Contexto: {patient_info.get('diagnosis', 'N/A')}
+    
+    --- OBJETIVOS DA SESSÃO ---
+    {goals}
+    
+    --- MATERIAL DE REFERÊNCIA (BASE DE CONHECIMENTO) ---
+    Utiliza as seguintes informações extraídas de livros/artigos/documentos fornecidos pelo terapeuta para guiar a metodologia desta sessão:
+    
+    {knowledge_base[:15000]} # Limite de caracteres para não exceder tokens (ajustável)
+    
+    --- TAREFA ---
+    Cria uma sessão estruturada (Acolhimento, Desenvolvimento, Fecho) aplicando as técnicas mencionadas no Material de Referência.
+    """
+    return prompt
 
-# --- Funcionalidade Principal ---
+# --- INTERFACE PRINCIPAL ---
 
-if pagina_selecionada == "Criar Roteiro com IA":
-    st.header("✨ Criar Roteiro Personalizado com IA")
-    st.markdown("Preencha os campos abaixo para gerar uma atividade sob medida.")
-
-    if not model:
-        st.error("Por favor, configure sua API Key do Google AI no código para usar esta funcionalidade.")
-    else:
-        # --- NOVOS CAMPOS ADICIONADOS AQUI ---
-        col1, col2 = st.columns(2)
-        with col1:
-            nome_paciente = st.text_input("Nome do Paciente / Aluno")
-        with col2:
-            numero_sessao = st.number_input("Número da Sessão", min_value=1, step=1)
-        
-        with st.form("roteiro_form"):
-            st.markdown("---")
-            st.subheader("Detalhes para a Criação do Roteiro")
-            
-            tema_aula = st.text_input("Qual o tema da aula ou conteúdo a ser trabalhado?", "Consciência fonológica")
-            
-            faixa_etaria = st.selectbox(
-                "Qual a faixa etária da criança/aluno?",
-                ("0-1 ano", "1-2 anos", "2-3 anos", "3-4 anos", "4-5 anos", "5-6 anos", "6-8 anos", "8-10 anos")
-            )
-
-            dificuldade = st.text_input("Qual a principal dificuldade ou transtorno do aluno?", "Dislexia")
-            
-            ferramentas = st.multiselect(
-                "Quais ferramentas digitais você gostaria de usar? (Opcional)",
-                ["Wordwall", "Genially", "Padlet", "Kahoot", "Jamboard", "Pixton", "Canva", "YouTube"]
-            )
-            
-            # --- NOVO CAMPO DE COMANDOS ADICIONADO AQUI ---
-            comandos_ia = st.text_area(
-                "Informações Adicionais ou Comandos para a IA", 
-                placeholder="Ex: Crie uma história curta com o personagem. Use frases simples e repita a palavra-chave 'barco' pelo menos 3 vezes."
-            )
-            
-            submitted = st.form_submit_button("Gerar Roteiro")
-
-            if submitted:
-                with st.spinner("Aguarde, a IA está criando um roteiro incrível..."):
-                    # Construindo o prompt para a IA
-                    prompt_parts = [
-                        "Crie um roteiro de aula ou intervenção pedagógica estruturado.",
-                        f"Tema principal: {tema_aula}.",
-                        f"Faixa etária: {faixa_etaria}.",
-                        f"Foco da adaptação: {dificuldade}.",
-                        "Estruture a resposta com: Objetivo, Ferramentas Sugeridas e um Passo a Passo detalhado (Acolhida, Apresentação, Desenvolvimento, Síntese, Encerramento).",
-                        "Seja criativo e didático."
-                    ]
-                    if ferramentas:
-                        prompt_parts.append(f"Incorpore o uso das seguintes ferramentas: {', '.join(ferramentas)}.")
-                    
-                    # --- ADICIONANDO OS NOVOS COMANDOS AO PROMPT ---
-                    if comandos_ia:
-                        prompt_parts.append(f"Instrução adicional importante do terapeuta: {comandos_ia}")
-
-                    prompt = "\n".join(prompt_parts)
-                    
-                    try:
-                        response = model.generate_content(prompt)
-                        st.subheader(f"📝 Roteiro Gerado para: {nome_paciente} (Sessão {numero_sessao})")
-                        st.markdown(response.text)
-                    except Exception as e:
-                        st.error(f"Ocorreu um erro ao gerar o roteiro: {e}")
-
-
-elif pagina_selecionada == "Ver Roteiros Existentes":
-    st.header("📚 Banco de Roteiros de Atividades")
-    st.markdown("Aqui você encontrará os 40 roteiros que desenvolvemos anteriormente.")
-
-    # Exemplo de como exibir alguns roteiros (em um app real, isso viria de um banco de dados)
-    st.subheader("Roteiro 19 – Gincana de Jogos Rápidos (Adaptado para TDAH)")
+def main():
+    # Título e Cabeçalho
+    st.title("🧠 NeuroTech Evoluir")
+    st.subheader("Assistente de Planeamento de Sessões Terapêuticas")
+    
     st.markdown("""
-    - **Objetivo:** Revisar conteúdos de forma dinâmica, mantendo a atenção através da novidade e da competição amigável.
-    - **Ferramentas sugeridas:** Baamboozle, Wordwall, LearningApps.
-    - **Passo a passo:**
-        - **Acolhida (1 min):** Anunciar uma "gincana de jogos" com 3 rodadas rápidas para criar expectativa.
-        - **Apresentação (1 min):** Explicar que cada jogo será diferente e rápido, mantendo o ritmo acelerado.
-        - **Desenvolvimento (15 min):** Realizar rodadas de 5 minutos cada, alternando entre a competição em equipe do Baamboozle, um jogo de "Roda Aleatória" do Wordwall e uma atividade de "Arrastar e Soltar" do LearningApps.
-        - **Síntese (2 min):** Perguntar qual dos três jogos foi o favorito e por quê, permitindo uma breve expressão de preferência.
-        - **Encerramento (1 min):** Comemorar a participação e os pontos de todos na gincana, focando no esforço e na diversão.
-    """)
-
-    st.subheader("Roteiro 21 – Mapa Interativo de Sons (Adaptado para Dislexia)")
-    st.markdown("""
-    - **Objetivo:** Fortalecer a consciência fonológica e a associação grafema-fonema com forte suporte de áudio e visual.
-    - **Ferramentas sugeridas:** ThingLink, Genially.
-    - **Passo a passo:**
-        - **Acolhida (2 min):** Iniciar com um som de um animal (áudio) e pedir para adivinhar qual é e qual a letra inicial do nome.
-        - **Apresentação (3 min):** Apresentar uma imagem interativa (ex: uma fazenda) no ThingLink com hotspots. Explicar que ao clicar nos animais, eles ouvirão o nome e o som da letra inicial.
-        - **Desenvolvimento (10 min):** O paciente explora a imagem. Ao clicar em um hotspot (ex: na VACA), ele vê a palavra escrita e pode clicar para ouvir a narração: "Vaca começa com o som /v/". O desafio é encontrar todos os objetos que começam com um som específico.
-        - **Síntese (3 min):** O paciente deve falar em voz alta outras duas palavras que também comecem com o mesmo som, sem a necessidade de escrevê-las.
-        - **Encerramento (2 min):** Parabenizar pela exploração sonora e reforçar o som aprendido.
+    Esta ferramenta ajuda terapeutas a criar sessões personalizadas. 
+    **Novidade:** Agora pode anexar livros, artigos ou transcrições de vídeos para a IA usar como base!
     """)
     
-    # Adicione mais roteiros aqui conforme necessário...
+    # Dividir o layout em colunas
+    col1, col2 = st.columns([1, 1])
 
+    with col1:
+        st.info("📂 **1. Dados do Paciente e Objetivos**")
+        name = st.text_input("Nome do Paciente")
+        age = st.number_input("Idade", min_value=0, max_value=120, step=1)
+        diagnosis = st.text_area("Diagnóstico ou Contexto Clínico", placeholder="Ex: TEA, Ansiedade Generalizada, TDAH...")
+        session_goals = st.text_area("Objetivo desta Sessão", placeholder="Ex: Trabalhar regulação emocional usando técnicas cognitivas...")
 
+    with col2:
+        st.warning("📚 **2. Base de Conhecimento (Anexos)**")
+        st.markdown("Carregue livros (PDF), artigos ou notas de vídeo para a IA estudar antes de criar a sessão.")
+        
+        uploaded_files = st.file_uploader(
+            "Arraste os ficheiros aqui", 
+            type=["pdf", "txt"], 
+            accept_multiple_files=True
+        )
+        
+        knowledge_text = ""
+        if uploaded_files:
+            with st.spinner("A processar documentos..."):
+                for uploaded_file in uploaded_files:
+                    try:
+                        if uploaded_file.name.endswith(".pdf"):
+                            knowledge_text += f"\n--- Fonte: {uploaded_file.name} ---\n"
+                            knowledge_text += extract_text_from_pdf(uploaded_file)
+                        elif uploaded_file.name.endswith(".txt"):
+                            knowledge_text += f"\n--- Fonte: {uploaded_file.name} ---\n"
+                            knowledge_text += extract_text_from_txt(uploaded_file)
+                    except Exception as e:
+                        st.error(f"Erro ao ler {uploaded_file.name}: {e}")
+                
+                if knowledge_text:
+                    st.success(f"Base de conhecimento carregada! ({len(knowledge_text)} caracteres extraídos)")
+                    with st.expander("Ver conteúdo extraído (apenas para verificação)"):
+                        st.write(knowledge_text[:1000] + "...")
+
+    # Botão de Geração
+    st.markdown("---")
+    if st.button("✨ Gerar Sessão com IA", type="primary"):
+        if not diagnosis or not session_goals:
+            st.error("Por favor, preencha o diagnóstico e os objetivos da sessão.")
+        else:
+            # Preparar os dados
+            patient_data = {"name": name, "age": age, "diagnosis": diagnosis}
+            
+            # Construir o Prompt Final
+            final_prompt = generate_session_prompt(patient_data, session_goals, knowledge_text)
+            
+            # --- INTEGRAÇÃO COM IA (Simulação) ---
+            # Aqui entraria a chamada real para OpenAI (GPT-4), Anthropic, etc.
+            # Como não tenho a sua API Key, simulo a resposta abaixo.
+            
+            with st.spinner("A IA está a ler os seus anexos e a planear a sessão..."):
+                
+                # EXEMPLO DE CHAMADA REAL (Comentado):
+                # import openai
+                # response = openai.ChatCompletion.create(
+                #     model="gpt-4",
+                #     messages=[{"role": "user", "content": final_prompt}]
+                # )
+                # result = response.choices[0].message.content
+                
+                # Resposta Simulada para demonstração
+                st.markdown("### 📝 Plano de Sessão Gerado")
+                st.markdown(f"""
+                **Paciente:** {name} ({age} anos)  
+                **Baseado em:** {len(uploaded_files)} ficheiros de referência.
+
+                ---
+                
+                #### 1. Acolhimento (10 min)
+                *Revisão do estado atual baseada no diagnóstico de {diagnosis}.*
+                - **Atividade:** Check-in emocional.
+                - **Conexão com a teoria:** Utilizando o conceito extraído dos anexos sobre 'vínculo terapêutico'.
+
+                #### 2. Desenvolvimento (30 min)
+                *Foco: {session_goals}*
+                - **Técnica Aplicada:** Se carregou um livro sobre TCC, aqui seria aplicada a reestruturação cognitiva.
+                - **Dinâmica:** Exercício prático conforme descrito no documento carregado.
+                
+                *(Nota: Esta é uma simulação. Para ver o resultado real, integre a sua chave de API no código).*
+                """)
+                
+                # Mostrar o prompt que seria enviado (para debug)
+                with st.expander("Ver Prompt enviado para a IA"):
+                    st.code(final_prompt)
+
+if __name__ == "__main__":
+    main()
