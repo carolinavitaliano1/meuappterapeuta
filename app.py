@@ -3,7 +3,6 @@ from PyPDF2 import PdfReader
 from openai import OpenAI
 import os
 
-
 # ===============================
 # CONFIGURAÇÃO DA PÁGINA
 # ===============================
@@ -234,4 +233,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
