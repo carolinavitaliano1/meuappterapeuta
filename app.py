@@ -1,8 +1,7 @@
-import openai
-import os
-
 import streamlit as st
 from PyPDF2 import PdfReader
+import openai
+import os
 
 # ===============================
 # CONFIGURAÇÃO DA PÁGINA
@@ -11,6 +10,11 @@ st.set_page_config(
     page_title="NeuroTech Evoluir – Terapeuta AI",
     layout="wide"
 )
+
+# ===============================
+# CONFIGURAÇÃO OPENAI
+# ===============================
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ===============================
 # ESTADO GLOBAL (CADASTRO)
@@ -36,6 +40,24 @@ def extract_text_from_txt(file):
     return file.getvalue().decode("utf-8")
 
 
+def call_openai(prompt):
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "Você é um terapeuta clínico experiente, com atuação multidisciplinar."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0.4
+    )
+    return response.choices[0].message.content
+
+
 def generate_session_prompt(patient_info, goals, approach, knowledge_base, num_sessions):
     prompt = f"""
 Atue como uma EQUIPE TERAPÊUTICA MULTIDISCIPLINAR EXPERIENTE.
@@ -59,27 +81,32 @@ Contexto clínico / queixa principal:
 {approach}
 
 ══════════════════════════════
-📅 PLANEJAMENTO
+📅 PLANEJAMENTO TERAPÊUTICO
 ══════════════════════════════
-Crie {num_sessions} sessões terapêuticas,
-cada uma com atividades diferentes e progressivas.
+Crie {num_sessions} sessões terapêuticas numeradas (Sessão 1, Sessão 2, etc),
+com progressão clínica coerente entre elas.
 
 ══════════════════════════════
 📚 BASE DE CONHECIMENTO
 ══════════════════════════════
+Utilize prioritariamente os materiais abaixo como referência clínica e teórica:
+
 {knowledge_base[:15000]}
 
 ══════════════════════════════
 🛠️ TAREFA
 ══════════════════════════════
-Para CADA sessão, descreva:
-- Acolhimento
-- Desenvolvimento (atividades detalhadas)
-- Fecho
-- Objetivos da sessão
-- Indicadores de evolução
+Para CADA sessão, apresente obrigatoriamente:
 
-Use linguagem técnica, prática e clínica.
+📍 Sessão X
+- Objetivo clínico da sessão
+- Acolhimento
+- Desenvolvimento (atividades terapêuticas detalhadas)
+- Fecho
+- Indicadores de evolução observáveis
+
+Use linguagem técnica, clara e profissional.
+O texto deve estar pronto para ser usado em relatório clínico ou PDF.
 Evite respostas genéricas.
 """
     return prompt
@@ -90,7 +117,7 @@ Evite respostas genéricas.
 
 def main():
     st.title("🧠 NeuroTech Evoluir")
-    st.subheader("Planejamento Terapêutico Multidisciplinar")
+    st.subheader("Planejamento Terapêutico Multidisciplinar com IA")
 
     col1, col2 = st.columns([1, 1])
 
@@ -128,7 +155,7 @@ def main():
 
         session_goals = st.text_area(
             "Objetivos terapêuticos",
-            placeholder="Ex: estimular comunicação funcional, ampliar atenção..."
+            placeholder="Ex: estimular comunicação funcional, ampliar autorregulação..."
         )
 
         num_sessions = st.number_input(
@@ -136,7 +163,7 @@ def main():
             min_value=1,
             max_value=52,
             step=1,
-            help="Ex: 4 sessões = 1 mês (1x por semana)"
+            help="Ex: 4 sessões = planejamento mensal (1x por semana)"
         )
 
         approach = st.multiselect(
@@ -178,7 +205,7 @@ def main():
             st.success(f"{len(uploaded_files)} arquivo(s) carregado(s).")
 
     # ===============================
-    # GERAR PLANO
+    # GERAR PLANO COM IA REAL
     # ===============================
     st.markdown("---")
 
@@ -194,11 +221,15 @@ def main():
                 num_sessions
             )
 
-            st.markdown("### 📝 Plano Gerado (Simulação)")
-            with st.expander("Ver prompt enviado para a IA"):
+            with st.spinner("Gerando plano terapêutico com IA..."):
+                resultado = call_openai(final_prompt)
+
+            st.markdown("### 📝 Plano Terapêutico Gerado")
+            st.markdown(resultado)
+
+            with st.expander("🔍 Ver prompt enviado para a IA"):
                 st.code(final_prompt)
 
 
 if __name__ == "__main__":
     main()
-
