@@ -42,7 +42,7 @@ def extract_text_from_txt(file):
 
 
 def call_openai(prompt):
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
@@ -234,6 +234,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
