@@ -1,3 +1,6 @@
+import openai
+import os
+
 import streamlit as st
 from PyPDF2 import PdfReader
 
@@ -198,3 +201,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
